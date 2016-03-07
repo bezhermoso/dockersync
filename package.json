@@ -22,8 +22,6 @@
     "lodash.debounce": "^4.0.3",
     "minimist": "^1.2.0",
     "ramda": "^0.19.1",
-    "shelljs": "^0.6.0",
-    "watch": "^0.17.1",
-    "watcher": "0.0.5"
+    "shelljs": "^0.6.0"
   }
 }

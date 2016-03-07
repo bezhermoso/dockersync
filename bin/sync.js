@@ -3,10 +3,18 @@
 var minimist = require("minimist");
 
 var args = minimist(process.argv.splice(1), {
-  string: 'machine',
-  string: 'dir',
+  string: ['machine', 'dir'],
+  boolean: ['initial-only', 'sync-only'],
+  alias: {
+    machine: 'm',
+    dir: 'd',
+    'initial-only': 'i',
+    'sync-only': 's',
+  },
   default: {
     dir: process.env.PWD,
+    initial: false,
+    'sync-only': false
   }
 });
 
@@ -19,8 +27,7 @@ var dockerMachine = require('../lib/docker-machine');
 var exec = require('../lib/exec');
 var StdError = exec.StdError;
 var Promise = require("bluebird");
-var watch = require("watch");
-var chokidar = require("chokidar");
+var nhokidar = require("chokidar");
 
 
 var log = R.tap(console.log);
@@ -50,17 +57,22 @@ var createVolumesInVm = function (config) {
 };
 
 var initialRsync = function (config) {
+
   var machine = config.machine;
   var rsyncs = [];
   dockersyncConfig.mapMounts(config, function(volumeDef, service, mount) {
     console.log( machine + '[' + service + ']:', 'syncing files',
       volumeDef.dir, '=>', volumeDef.vm_dir, '...'
     );
+    var exclude = volumeDef.exclude.map(function (ex) {
+      return path.join(ex, '/**/*');
+    });
     rsyncs.push(dockerMachine.rsync(
       machine,
+      config,
       volumeDef.dir,
       volumeDef.vm_dir,
-      volumeDef.exclude
+      exclude
     ));
     return volumeDef;
   });
@@ -75,12 +87,17 @@ var startFileWatchers = function (config) {
     var debouncedRsync = debounce(function(volumeDef) {
       console.log(machine + '[' + service + ']', 'files changed!');
       console.log('syncing', volumeDef.dir, '=>', volumeDef.vm_dir, '...');
-      return dockerMachine.rsync( machine, volumeDef.dir, volumeDef.vm_dir, volumeDef.exclude)
+      return dockerMachine.rsync(machine, config, volumeDef.dir, volumeDef.vm_dir, volumeDef.exclude)
         .then(function() {
           console.log(' >', volumeDef.dir, '=>', volumeDef.vm_dir, 'synced.');
-        });
-    }, 3000);
+        }).catch(StdError, function (err) {
+          console.log('Error when syncing files:');
+          console.log(err.message);
+          console.log(err.stack);
+        })
+    }, 1000);
     var watcher = chokidar.watch('.', {
+      ignoreInitial: true,
       cwd: volumeDef.dir,
       ignored: volumeDef.exclude,
       awaitWriteFinish: true
@@ -92,18 +109,44 @@ var startFileWatchers = function (config) {
   return config;
 };
 
+var gatherMachineInfo = function (config) {
+  return dockerMachine.inspect(config.machine)
+    .then(R.compose(R.assoc('info', R.__, config)))
+    .then(function (config) {
+      return exec('docker-machine ip ' + config.machine)
+        .then(R.assoc('ip_address', R.__, config));
+    })
+};
 
-
-dockersyncConfig.fromFile(configFile)
+var flow = dockersyncConfig.fromFile(configFile)
   .then(function(config) {
     config.machine = args.machine || config.machine;
     return config;
   })
   .then(startMachine)
-  .then(createVolumesInVm)
-  .then(initialRsync)
-  .then(startFileWatchers)
-  .catch(StdError, function(err) {
+  .then(gatherMachineInfo)
+  .then(createVolumesInVm);
+
+if (args['initial-only'] == true || (args['initial-only'] == false && args['sync-only'] == false)) {
+  flow = flow.then(initialRsync);
+}
+
+if (args['sync-only'] == false && args['initial-only'] == false) {
+  flow = flow.then(function (config) {
+    if (config.command) {
+      console.log('Executing command:');
+      console.log(' > ' + config.command);
+      return exec(config.command).then(R.always(config));
+    }
+    return config;
+  });
+}
+
+if (args['sync-only'] == true || (args['initial-only'] == false && args['sync-only'] == false)) {
+  flow = flow.then(startFileWatchers);
+}
+
+flow.catch(StdError, function(err) {
     console.error(err.message);
     console.error(err.stack);
   })
