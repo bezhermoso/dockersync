@@ -1,0 +1,12 @@
+machine: mad
+services:
+  service1:
+    /opt/app:
+      dir: service1
+      vm_dir: /opt/volumes/mad/service1
+      exclude: [ .git/**/*, node_modules/**/* ]
+  service2:
+    /opt/app:
+      dir: service2
+      vm_dir: /opt/volumes/mad/service2
+      exclude: [ .git/**/*, node_modules/**/* ]

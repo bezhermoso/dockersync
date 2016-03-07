@@ -1,0 +1,29 @@
+{
+  "name": "dockersync",
+  "version": "0.0.1",
+  "description": "Development workflow with Docker & rsync",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "bin": {
+    "dockersync": "bin/sync.js"
+  },
+  "keywords": [
+    "docker",
+    "rsync"
+  ],
+  "author": "Bez Hermoso",
+  "license": "MIT",
+  "dependencies": {
+    "bluebird": "^3.3.3",
+    "chokidar": "^1.4.3",
+    "js-yaml": "^3.5.3",
+    "lodash.debounce": "^4.0.3",
+    "minimist": "^1.2.0",
+    "ramda": "^0.19.1",
+    "shelljs": "^0.6.0",
+    "watch": "^0.17.1",
+    "watcher": "0.0.5"
+  }
+}
