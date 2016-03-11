@@ -46,6 +46,7 @@ var startMachine = function (config) {
 var createVolumesInVm = function (config) {
   var machine = config.machine;
   var mkdirs = [];
+
   dockersyncConfig.mapMounts(config, function (volumeDef, service, mount) {
     console.log(machine + '[' + service + ']: ensuring that ' + volumeDef.vm_dir + ' exists ...');
     mkdirs.push(dockerMachine.mkdir(machine, volumeDef.vm_dir, '0775').then(function () {
@@ -53,6 +54,7 @@ var createVolumesInVm = function (config) {
     }));
     return volumeDef;
   });
+
   return Promise.all(mkdirs).then(R.always(config));
 };
 
@@ -60,13 +62,16 @@ var initialRsync = function (config) {
 
   var machine = config.machine;
   var rsyncs = [];
+
   dockersyncConfig.mapMounts(config, function(volumeDef, service, mount) {
     console.log( machine + '[' + service + ']:', 'syncing files',
       volumeDef.dir, '=>', volumeDef.vm_dir, '...'
     );
+
     var exclude = volumeDef.exclude.map(function (ex) {
       return path.join(ex, '/**/*');
     });
+
     rsyncs.push(dockerMachine.rsync(
       machine,
       config,
@@ -74,14 +79,17 @@ var initialRsync = function (config) {
       volumeDef.vm_dir,
       exclude
     ));
+
     return volumeDef;
   });
+
   return Promise.all(rsyncs).then(R.always(config));
 }
 
 var startFileWatchers = function (config) {
   var watchers = [];
   var machine = config.machine;
+
   dockersyncConfig.mapMounts(config, function(volumeDef, service, mount) {
     console.log(' >', 'watching', volumeDef.dir, 'for changes', '...');
     var debouncedRsync = debounce(function(volumeDef) {
@@ -92,20 +100,24 @@ var startFileWatchers = function (config) {
           console.log(' >', volumeDef.dir, '=>', volumeDef.vm_dir, 'synced.');
         }).catch(StdError, function (err) {
           console.log('Error when syncing files:');
-          console.log(err.message);
-          console.log(err.stack);
-        })
+          console.error(err.message);
+          console.error(err.stack);
+        });
     }, 1000);
+
     var watcher = chokidar.watch('.', {
       ignoreInitial: true,
       cwd: volumeDef.dir,
       ignored: volumeDef.exclude,
       awaitWriteFinish: true
     });
+
     watcher.on('all', function (e, p) {
       debouncedRsync(volumeDef);
     });
-  })
+
+  });
+
   return config;
 };
 
